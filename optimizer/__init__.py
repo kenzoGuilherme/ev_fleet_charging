@@ -80,6 +80,12 @@ def optimization(sets, par, evs, bess, evcs, connectors, edscosts):
         for ev in sets.evs:
             model.α_connector_lim.add(expr = sum(model.αevcs[ev, c, t] for c in sets.connectors) <= 1)
 
+    model.α_switch = pyo.ConstraintList()
+    for ev in sets.evs:
+        for c in sets.connectors:
+            for t in sets.time[1:]:
+                model.α_switch.add(expr = model.αevcs[ev, c, t - timedelta(hours=Δt)] - model.αevcs[ev, c, t] <= model.EVSoC[ev, t])
+
     solution = SolverFactory("gurobi")
     results = solution.solve(model)
 
