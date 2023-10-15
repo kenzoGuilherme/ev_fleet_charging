@@ -32,42 +32,41 @@ results = optimizer.optimization(sets, par, evs, bess, evcs, connectors, edscost
 ###########################################################################################
 
 
-from matplotlib.colors import ListedColormap
-import matplotlib.dates as mdates
-import matplotlib.pyplot as plt
-import matplotlib as mpl
-import numpy as np
+# from matplotlib.colors import ListedColormap
+# import matplotlib.dates as mdates
+# import matplotlib.pyplot as plt
+# import matplotlib as mpl
+# import numpy as np
 
 
-mpl.rc('font',family = 'serif', serif = 'cmr10')
-enable = results.αevcs.get_values()
-for ev in sets.evs:
-    plt.figure()
-    dt = sets.time
-    evcsnames = sets.connectors
-    heatmatrix = []
-    for c in sets.connectors:
-        aux = []
-        for t in sets.time:
-            aux.append(enable[ev,c,t])
+# mpl.rc('font',family = 'serif', serif = 'cmr10')
+# enable = results.αevcs.get_values()
+# for ev in sets.evs:
+#     plt.figure()
+#     dt = sets.time
+#     evcsnames = sets.connectors
+#     heatmatrix = []
+#     for c in sets.connectors:
+#         aux = []
+#         for t in sets.time:
+#             aux.append(enable[ev,c,t])
         
-        heatmatrix.append(aux)
+#         heatmatrix.append(aux)
 
-    cores = ['red', 'green']
+#     cores = ['red', 'green']
 
-    cores = ['red', 'green']
-    cmap_personalizado = ListedColormap(cores)
-    plt.imshow(heatmatrix, cmap=cmap_personalizado, aspect='auto', interpolation="nearest")
-    plt.yticks(range(len(evcsnames)), evcsnames)
-    horas = [d.strftime('%H:%M') for d in dt]
-    plt.xticks(range(len(dt)), horas, rotation=45, ha='right')
-    plt.gca().xaxis.set_major_locator(mdates.AutoDateLocator())
-    plt.tight_layout()
-    plt.colorbar()  # Adicione uma barra de cores para referência
-    plt.xlabel('Timestamp')
-    plt.legend()
-    plt.savefig(f'Results/{ev}-operation.png', format='png', dpi=300)
-    plt.close("All")
+#     cores = ['red', 'green']
+#     cmap_personalizado = ListedColormap(cores)
+#     plt.imshow(heatmatrix, cmap=cmap_personalizado, aspect='auto', interpolation="nearest")
+#     plt.yticks(range(len(evcsnames)), evcsnames)
+#     horas = [d.strftime('%H:%M') for d in dt]
+#     plt.xticks(range(len(dt)), horas, rotation=45, ha='right')
+#     plt.gca().xaxis.set_major_locator(mdates.AutoDateLocator())
+#     plt.tight_layout()
+#     plt.colorbar()  # Adicione uma barra de cores para referência
+#     plt.xlabel('Timestamp')
+#     plt.legend()
+#     plt.savefig(f'Results/{ev}-operation.png', format='png', dpi=300)
+#     plt.close("All")
 
 
-a = 1

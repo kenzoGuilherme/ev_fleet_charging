@@ -1,105 +1,116 @@
-from pyomo.opt import SolverFactory, SolverStatus, TerminationCondition
-from datetime import timedelta
-import pyomo.environ as pyo
-import pandas as pd
+    from pyomo.opt import SolverFactory, SolverStatus, TerminationCondition
+    from datetime import timedelta
+    import pyomo.environ as pyo
+    import pandas as pd
 
-
-    
-
-class Sets:
-    def __init__(self, date, data, evs, bess, evcs, connectors):
-        self.time   = list(
-            pd.date_range(
-                start = date, 
-                periods = int(data.Hours * 60/data.Δt), 
-                freq = f'{data.Δt}T'
+    class Sets:
+        def __init__(self, date, data, evs, bess, evcs, connectors):
+            self.time   = list(
+                pd.date_range(
+                    start = date, 
+                    periods = int(data.Hours * 60/data.Δt), 
+                    freq = f'{data.Δt}T'
+                )
             )
+            self.evs    = list(evs.index)
+            self.bess   = list(bess.index)
+            self.connectors = list(connectors.index)
+            return
+
+
+    def optimization(sets, par, evs, bess, evcs, connectors, edscosts):
+        Δt = par.Δt/60
+
+        model = pyo.ConcreteModel()
+        
+        #   Variables definition
+        model.pTotalGrid   = pyo.Var(sets.time, within=pyo.Reals)
+        model.pPosGrid     = pyo.Var(sets.time, within=pyo.NonNegativeReals)
+        model.pNegGrid     = pyo.Var(sets.time, within=pyo.NonNegativeReals)
+        
+        model.pEV       = pyo.Var(sets.evs, sets.time, within = pyo.NonNegativeReals)
+        model.SoCEV     = pyo.Var(sets.evs, sets.time, within = pyo.NonNegativeReals)
+        model.αevcs     = pyo.Var(sets.evs, sets.connectors, sets.time, within = pyo.Binary)
+
+        model.pChargeBess      = pyo.Var(sets.bess, sets.time, within=pyo.NonNegativeReals)
+        model.pDischargeBess   = pyo.Var(sets.bess, sets.time, within=pyo.NonNegativeReals)
+        model.SoCBess          = pyo.Var(sets.bess, sets.time, within=pyo.NonNegativeReals)
+
+        #   Objective Function
+        model.value = pyo.Objective(
+            expr =  Δt * sum(model.pPosGrid[t] * par.ceds[t.hour] for t in sets.time),        
+            sense = pyo.minimize 
         )
-        self.evs    = list(evs.index)
-        self.bess   = list(bess.index)
-        self.connectors = list(connectors.index)
-        return
 
 
-def optimization(sets, par, evs, bess, evcs, connectors, edscosts):
-    Δt = par.Δt/60
+        #   Bess Initial SoC
+        model.SocBessInitial = pyo.ConstraintList()
+        model.SocBessInitial.add(expr = model.SoCBess[bess,0] == 0)
 
-    model = pyo.ConcreteModel()
-    
-    #   Variables definition
-    model.Peds      = pyo.Var(sets.time, within=pyo.Reals)
-    model.Ppeds     = pyo.Var(sets.time, within=pyo.NonNegativeReals)
-    model.Pneds     = pyo.Var(sets.time, within=pyo.NonNegativeReals)
-    
-    model.Pev       = pyo.Var(sets.evs, sets.time, within = pyo.NonNegativeReals)
-    model.EVSoC     = pyo.Var(sets.evs, sets.time, within = pyo.NonNegativeReals)
-    model.αevcs     = pyo.Var(sets.evs, sets.connectors, sets.time, within = pyo.Binary)
-
-
-    #   Objective Function
-    model.value = pyo.Objective(
-        expr =  Δt * sum(model.Ppeds[t] * par.ceds[t.hour] for t in sets.time),        
-        sense = pyo.minimize 
-    )
-
-
-    #   Powerflow constraints
-    model.powerflow = pyo.ConstraintList()
-    for t in sets.time:
-        model.powerflow.add(expr = model.Peds[t] == sum(model.Pev[k, t] for k in sets.evs))
-    
-   
-    #   EDS Constraints
-    model.eds_constraint = pyo.ConstraintList()
-    for t in sets.time:
-        model.eds_constraint.add(expr = model.Peds[t] == model.Ppeds[t] - model.Pneds[t])
-
-
-    #   EV Constraints
-    model.ev_SoCini     = pyo.ConstraintList()
-    model.ev_SoCend     = pyo.ConstraintList()
-    model.ev_SoC        = pyo.ConstraintList()
-    for ev in sets.evs:
-        model.ev_SoCini.add(expr = model.EVSoC[ev, sets.time[0] + timedelta(hours = int(evs.loc[ev].arrival))] == evs.loc[ev]["SoCini"])
-        model.ev_SoCend.add(expr = model.EVSoC[ev, sets.time[0] + timedelta(hours = int(evs.loc[ev].departure))] == 1)
-        for t in sets.time[1:]:
-            model.ev_SoC.add(expr = model.EVSoC[ev, t] == model.EVSoC[ev, t - timedelta(hours = Δt)] + Δt * model.Pev[ev, t] / evs.loc[ev]["MaxEnergy"])
-    
-    model.α_limit       = pyo.ConstraintList()
-    for ev in sets.evs:
+        #   Bess Charging 
+        model.bessDynamic = pyo.ConstraintList()
         for t in sets.time:
-            model.α_limit.add(expr = model.Pev[ev, t] <= sum(connectors.loc[c]["Pmax"] * model.αevcs[ev, c, t] for c in sets.connectors))
+            for bess in sets.bess:
+                model.bessDynamic.add(expr = model.SoCBess[bess,t] == sum(model.pChargeBess[bess,t]) + model.SoCBess[bess,1] - model.pDischargeBess[bess,t])
 
-    model.α_ev_limit  = pyo.ConstraintList()
-    for t in sets.time:
-        for c in sets.connectors:
-            model.α_ev_limit.add(expr = sum(model.αevcs[ev, c, t] for ev in sets.evs) <= 1)
-
-    model.α_connector_lim = pyo.ConstraintList()
-    for t in sets.time:
-        for ev in sets.evs:
-            model.α_connector_lim.add(expr = sum(model.αevcs[ev, c, t] for c in sets.connectors) <= 1)
-
-    model.α_switch = pyo.ConstraintList()
-    for ev in sets.evs:
-        for c in sets.connectors:
-            for t in sets.time[1:]:
-                model.α_switch.add(expr = model.αevcs[ev, c, t - timedelta(hours=Δt)] - model.αevcs[ev, c, t] <= 1)
-
-    solution = SolverFactory("gurobi")
-    results = solution.solve(model)
-
-    if (results.solver.status == SolverStatus.ok) and (results.solver.termination_condition == TerminationCondition.optimal):
-        print ("this is feasible and optimal")
-    elif results.solver.termination_condition == TerminationCondition.infeasible:
-        print ("do something about it? or exit?")
-        return
-    else:
-        # something else is wrong
-        print (str(results.solver))
-        return
+        #  Powerflow constraints
+        model.powerflow = pyo.ConstraintList()
+        for t in sets.time:
+            model.powerflow.add(expr = model.pTotalGrid[t] == sum(model.pEV[k, t] for k in sets.evs)  + (model.pChargeBess[bess, t] for bess in sets.bess))
     
-    print(f'Função objetivo: {model.value()}')
-    #   Get next step control signal
+        #   EDS Constraints
+        model.gridConstraint = pyo.ConstraintList()
+        for t in sets.time:
+            model.gridConstraint.add(expr = model.pTotalGrid[t] == model.pPosGrid[t] - model.pNegGrid[t])
 
-    return model
+
+        #   EV Constraints
+        model.ev_SoCini     = pyo.ConstraintList()
+        model.ev_SoCend     = pyo.ConstraintList()
+        model.ev_SoC        = pyo.ConstraintList()
+        
+        for ev in sets.evs:
+            model.ev_SoCini.add(expr = model.SoCEV[ev, sets.time[0] + timedelta(hours = int(evs.loc[ev].arrival))] == evs.loc[ev]["SoCini"])
+            model.ev_SoCend.add(expr = model.SoCEV[ev, sets.time[0] + timedelta(hours = int(evs.loc[ev].departure))] == 1)
+            for t in sets.time[1:]:
+                model.ev_SoC.add(expr = model.SoCEV[ev, t] == model.SoCEV[ev, t - timedelta(hours = Δt)] + Δt * model.pEV[ev, t] / evs.loc[ev]["MaxEnergy"])
+
+        model.α_limit = pyo.ConstraintList()
+        for ev in sets.evs:
+            for t in sets.time:
+                model.α_limit.add(expr = model.pEV[ev, t] <= sum(connectors.loc[c]["Pmax"] * model.αevcs[ev, c, t] for c in sets.connectors))
+
+        model.α_ev_limit = pyo.ConstraintList()
+        for t in sets.time:
+            for c in sets.connectors:
+                model.α_ev_limit.add(expr = sum(model.αevcs[ev, c, t] for ev in sets.evs) <= 1)
+
+        model.α_connector_lim = pyo.ConstraintList()
+        for t in sets.time:
+            for ev in sets.evs:
+                model.α_connector_lim.add(expr = sum(model.αevcs[ev, c, t] for c in sets.connectors) <= 1)
+
+        model.α_switch = pyo.ConstraintList()
+        for ev in sets.evs:
+            for c in sets.connectors:
+                for t in sets.time[1:]:
+                    model.α_switch.add(expr = model.αevcs[ev, c, t - timedelta(hours=Δt)] - model.αevcs[ev, c, t] <= 1)
+
+        solution = SolverFactory("glpk")
+        results = solution.solve(model)
+
+        if (results.solver.status == SolverStatus.ok) and (results.solver.termination_condition == TerminationCondition.optimal):
+            print ("this is feasible and optimal")
+        elif results.solver.termination_condition == TerminationCondition.infeasible:
+            print ("do something about it? or exit?")
+            return
+        else:
+            # something else is wrong
+            print (str(results.solver))
+            return
+        
+        print(f'Função objetivo: {model.value()}')
+        #   Get next step control signal
+
+
+        return model

@@ -6,7 +6,10 @@
         "request": "launch",
         "program": "${file}",
         "args": ["-s", "1"],
-        "console": "integratedTerminal"
+        "console": "integratedTerminal",
+        "env": {
+          "PYDEVD_CONTAINER_RANDOM_ACCESS_MAX_ITEMS": "1500",
+        },
  }
 ]
 }
