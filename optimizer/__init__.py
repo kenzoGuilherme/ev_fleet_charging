@@ -65,20 +65,25 @@ def optimization(sets, par):
     for t in sets.time:
         if t != sets.time[0]:
             model.bessDynamic.add(expr = model.SoCBess[t] == model.SoCBess[t-timedelta(hours = Δt)] 
-                                    + (model.pChargeBess[t]) * Δt / df_BESS.loc[0,"Capacity"])
+                                    + (model.pChargeBess[t] - model.pDischargeBess[t]) 
+                                    * Δt / df_BESS.loc[0,"Capacity"])
         else:
             model.bessDynamic.add(expr = model.SoCBess[t] == df_BESS.loc[0,"Minimum SOC"])
 
 #   Bess SoC Boundaries
-    model.bessSoCBoundaries = pyo.ConstraintList()
-    model.bessSoCBoundaries.add(expr = model.SoCBess[t] >= df_BESS.loc[0,"Minimum SOC"] 
-                                and model.SoCBess[t] <= 1)
+#   Bess SoC Boundaries (Lower)
+    model.bessSoCBoundariesLower = pyo.ConstraintList()
+    model.bessSoCBoundariesLower.add(expr = model.SoCBess[t] >= df_BESS.loc[0,"Minimum SOC"])
+                                
+#   Bess SoC Boundaries (Higher)
+    model.bessSoCBoundariesHigher = pyo.ConstraintList()
+    model.bessSoCBoundariesHigher.add(expr = model.SoCBess[t] <= 1)                    
         
 #  Powerflow
     model.powerflow = pyo.ConstraintList()
     for t in sets.time:
-        model.powerflow.add(expr = model.pTotalGrid[t] == sum(model.pEV[ev, t] for ev in evs) + model.pChargeBess[t])
-
+        model.powerflow.add(expr = model.pTotalGrid[t] == sum(model.pEV[ev, t] for ev in evs) )
+                            # + model.pChargeBess[t] - model.pDischargeBess[t])
 
 #   EDS Constraints
     model.gridConstraint = pyo.ConstraintList()
