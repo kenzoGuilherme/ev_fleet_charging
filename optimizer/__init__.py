@@ -82,8 +82,8 @@ def optimization(sets, par):
 #  Powerflow
     model.powerflow = pyo.ConstraintList()
     for t in sets.time:
-        model.powerflow.add(expr = model.pTotalGrid[t] == sum(model.pEV[ev, t] for ev in evs) )
-                            # + model.pChargeBess[t] - model.pDischargeBess[t])
+        model.powerflow.add(expr = model.pTotalGrid[t] == sum(model.pEV[ev, t] for ev in evs)
+                             + model.pChargeBess[t] - model.pDischargeBess[t])
 
 #   EDS Constraints
     model.gridConstraint = pyo.ConstraintList()
