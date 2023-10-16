@@ -1,7 +1,6 @@
 import pandas as pd
 from pyomo.opt import SolverFactory, SolverStatus, TerminationCondition
 import pyomo.environ as pyo
-import pandas as pd
 
 weekdays = ["mon","tue","wed","thu","fri","sat","sun"]
 
