@@ -4,7 +4,7 @@ import pyomo.environ as pyo
 import pandas as pd
 
 class Sets:
-        def __init__(self, date, data): # evs, bess, evcs, connectors):
+        def __init__(self, date, data):
             self.time   = list(
                 pd.date_range(
                     start = date, 
@@ -12,11 +12,16 @@ class Sets:
                     freq = f'{data.Δt}T'
                 )
             )
-#            self.evs    = list(evs.index)
-#            self.bess   = list(bess.index)
-#            self.connectors = list(connectors.index)
+
             return
-        
+
+
+def pPV(t):
+    return df_pPV.loc[t, "Grid Power"]
+
+df_pPV = pd.read_excel("data.xlsx", sheet_name="Sheet1")
+df_pPV.set_index("Time", inplace = True)
+
 df_BESS = pd.read_excel("data.xlsx", sheet_name="BESS")
 df_Connector = pd.read_excel("data.xlsx", sheet_name="Connector")
 df_Vehicles = pd.read_excel("data.xlsx", sheet_name="Vehicles")
@@ -73,17 +78,19 @@ def optimization(sets, par):
 #   Bess SoC Boundaries
 #   Bess SoC Boundaries (Lower)
     model.bessSoCBoundariesLower = pyo.ConstraintList()
-    model.bessSoCBoundariesLower.add(expr = model.SoCBess[t] >= df_BESS.loc[0,"Minimum SOC"])
+    for t in sets.time:
+        model.bessSoCBoundariesLower.add(expr = model.SoCBess[t] >= df_BESS.loc[0,"Minimum SOC"])
                                 
 #   Bess SoC Boundaries (Higher)
     model.bessSoCBoundariesHigher = pyo.ConstraintList()
-    model.bessSoCBoundariesHigher.add(expr = model.SoCBess[t] <= 1)                    
+    for t in sets.time:
+        model.bessSoCBoundariesHigher.add(expr = model.SoCBess[t] <= 1)                
         
 #  Powerflow
     model.powerflow = pyo.ConstraintList()
     for t in sets.time:
         model.powerflow.add(expr = model.pTotalGrid[t] == sum(model.pEV[ev, t] for ev in evs)
-                             + model.pChargeBess[t] - model.pDischargeBess[t])
+                             + model.pChargeBess[t] - model.pDischargeBess[t] - df_pPV.loc[t, "Grid Power"] )
 
 #   EDS Constraints
     model.gridConstraint = pyo.ConstraintList()
